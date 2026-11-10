@@ -1,0 +1,4 @@
+Le fichier landcrew.db (base de données SQLite de LandCrew) est créé ici
+automatiquement au premier démarrage du serveur. Ne le placez jamais dans
+un dossier public et ne le téléchargez pas : il contient les données de
+l'entreprise (clients, employés, pointages).
