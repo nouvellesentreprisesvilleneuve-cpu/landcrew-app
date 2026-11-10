@@ -1,0 +1,1 @@
+{"dependencies":{"@libsql/client":"0.14.0","drizzle-orm":"0.45.2"},"description":"LandCrew — hôte autonome Node.js pour https://app.landcrew.ca (cPanel / Passenger chez WHC)","engines":{"node":">=18"},"main":"app.js","name":"landcrew-app","private":true,"scripts":{"start":"node app.js"},"version":"1.0.0"}
