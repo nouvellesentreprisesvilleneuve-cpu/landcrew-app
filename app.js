@@ -88,13 +88,19 @@ function notSupported(what) {
   };
 }
 
-function makeCtx() {
+function makeCtx(sessionToken) {
   return {
     slug: "landcrew",
     invocationId: `whc-${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 10)}`,
     spaceDir: ROOT,
+    // Multi-entreprise : le jeton de session du client (en-tête
+    // « x-landcrew-session ») et le marqueur d'hôte autonome — sans
+    // session valide, les actions métier sont refusées (voir la garde
+    // dans handleAction) et les actions lisent la compagnie du jeton.
+    sessionToken: sessionToken ?? undefined,
+    hostStandalone: true,
     db: () => db,
     viewer: undefined,
     blobs: {
@@ -151,6 +157,26 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+// Actions accessibles sans session : l'accès lui-même (inscription,
+// connexion, code d'entreprise) et l'espace CLIENT public de
+// l'annuaire (les demandes sont routées vers la bonne entreprise
+// côté serveur).
+const PUBLIC_ACTIONS = new Set([
+  "registerCompany",
+  "loginCompany",
+  "loginEmployee",
+  "getJoinCompany",
+  "getSession",
+  "logout",
+  "listDirectoryListings",
+  "registerClientAccount",
+  "getClientAccount",
+  "updateClientAccount",
+  "listMyClientRequests",
+  "createQuoteRequest",
+  "geocodeAddress",
+]);
+
 async function handleAction(req, res) {
   let raw = "";
   for await (const chunk of req) raw += chunk;
@@ -166,9 +192,34 @@ async function handleAction(req, res) {
       error: `Action inconnue : ${String(payload.action)}`,
     });
   }
+  // Multi-entreprise : hors actions publiques, un jeton de session
+  // valide est exigé — chaque compagnie ne voit que SON espace.
+  const rawToken = req.headers["x-landcrew-session"];
+  const sessionToken =
+    typeof rawToken === "string" && rawToken ? rawToken : null;
+  if (!PUBLIC_ACTIONS.has(payload.action)) {
+    let valid = false;
+    if (sessionToken) {
+      try {
+        const rs = await client.execute({
+          sql: "SELECT expires_at FROM sessions WHERE token = ?",
+          args: [sessionToken],
+        });
+        const row = rs.rows[0];
+        if (row && Number(row.expires_at) > Date.now()) valid = true;
+      } catch {
+        valid = false;
+      }
+    }
+    if (!valid) {
+      return sendJson(res, 200, {
+        error: "Session requise — connectez-vous à votre entreprise.",
+      });
+    }
+  }
   try {
     const args = def.request.parse(payload.args ?? {});
-    const result = await def.handler(makeCtx(), args);
+    const result = await def.handler(makeCtx(sessionToken), args);
     const data = def.response.parse(result);
     return sendJson(res, 200, { data });
   } catch (e) {

@@ -5029,6 +5029,20 @@ function bindIfParam(value, column) {
 var eq = (left, right) => {
   return sql`${left} = ${bindIfParam(right, left)}`;
 };
+function and(...unfilteredConditions) {
+  const conditions = unfilteredConditions.filter((c) => c !== undefined);
+  if (conditions.length === 0) {
+    return;
+  }
+  if (conditions.length === 1) {
+    return new SQL(conditions);
+  }
+  return new SQL([
+    new StringChunk("("),
+    sql.join(conditions, new StringChunk(" and ")),
+    new StringChunk(")")
+  ]);
+}
 
 // node_modules/drizzle-orm/sql/expressions/select.js
 function asc(column) {
@@ -5572,8 +5586,31 @@ var sqliteTable = (name, columns, extraConfig) => {
 };
 
 // src/schema.ts
+var companies = sqliteTable("companies", {
+  id: integer2("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  ownerEmail: text("owner_email").notNull().unique(),
+  accessCodeHash: text("access_code_hash").notNull(),
+  joinCode: text("join_code").notNull().unique(),
+  plan: text("plan", {
+    enum: ["essai", "equipe2", "equipe4", "createur"]
+  }).notNull().default("essai"),
+  trialEndsAt: integer2("trial_ends_at", { mode: "timestamp_ms" }),
+  createdAt: integer2("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date),
+  updatedAt: integer2("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date)
+});
+var sessions = sqliteTable("sessions", {
+  id: integer2("id").primaryKey({ autoIncrement: true }),
+  token: text("token").notNull().unique(),
+  companyId: integer2("company_id").notNull().references(() => companies.id),
+  role: text("role", { enum: ["proprietaire", "employe"] }).notNull(),
+  employeeId: integer2("employee_id").references(() => employees.id),
+  createdAt: integer2("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date),
+  expiresAt: integer2("expires_at", { mode: "timestamp_ms" })
+});
 var clients = sqliteTable("clients", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   name: text("name").notNull(),
   phone: text("phone").notNull().default(""),
   email: text("email").notNull().default(""),
@@ -5582,6 +5619,7 @@ var clients = sqliteTable("clients", {
 });
 var terrains = sqliteTable("terrains", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   clientId: integer2("client_id").notNull().references(() => clients.id),
   address: text("address").notNull(),
   service: text("service", { enum: ["tonte", "deneigement", "les_deux"] }).notNull().default("tonte"),
@@ -5597,12 +5635,14 @@ var terrains = sqliteTable("terrains", {
 });
 var employees = sqliteTable("employees", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   name: text("name").notNull(),
   phone: text("phone").notNull().default(""),
   createdAt: integer2("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date)
 });
 var quotes = sqliteTable("quotes", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   clientId: integer2("client_id").references(() => clients.id),
   title: text("title").notNull(),
   lines: text("lines").notNull().default("[]"),
@@ -5628,6 +5668,7 @@ var quotes = sqliteTable("quotes", {
 });
 var quoteRequests = sqliteTable("quote_requests", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   clientName: text("client_name").notNull(),
   phone: text("phone").notNull().default(""),
   email: text("email").notNull().default(""),
@@ -5644,6 +5685,7 @@ var quoteRequests = sqliteTable("quote_requests", {
 });
 var clientAccounts = sqliteTable("client_accounts", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").references(() => companies.id),
   name: text("name").notNull(),
   phone: text("phone").notNull().default(""),
   email: text("email").notNull().default(""),
@@ -5652,6 +5694,7 @@ var clientAccounts = sqliteTable("client_accounts", {
 });
 var directoryListings = sqliteTable("directory_listings", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   businessName: text("business_name").notNull(),
   description: text("description").notNull().default(""),
   services: text("services").notNull().default("tonte"),
@@ -5664,6 +5707,7 @@ var directoryListings = sqliteTable("directory_listings", {
 });
 var timeEvents = sqliteTable("time_events", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   employeeId: integer2("employee_id").notNull().references(() => employees.id),
   routeId: integer2("route_id").references(() => routes.id),
   stopId: integer2("stop_id").references(() => routeStops.id),
@@ -5692,6 +5736,7 @@ var settings = sqliteTable("settings", {
 });
 var routes = sqliteTable("routes", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   date: text("date").notNull(),
   name: text("name").notNull(),
   service: text("service", { enum: ["tonte", "deneigement"] }).notNull().default("tonte"),
@@ -5700,6 +5745,7 @@ var routes = sqliteTable("routes", {
 });
 var routeStops = sqliteTable("route_stops", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   routeId: integer2("route_id").notNull().references(() => routes.id),
   terrainId: integer2("terrain_id").references(() => terrains.id),
   position: integer2("position").notNull(),
@@ -5717,6 +5763,7 @@ var routeStops = sqliteTable("route_stops", {
 });
 var exitSurveys = sqliteTable("exit_surveys", {
   id: integer2("id").primaryKey({ autoIncrement: true }),
+  companyId: integer2("company_id").notNull().default(1).references(() => companies.id),
   reason: text("reason").notNull(),
   detail: text("detail").notNull().default(""),
   planKey: text("plan_key").notNull().default(""),
@@ -5834,37 +5881,159 @@ var planKeyEnum = _enum(["forfait_2_equipes", "forfait_4_equipes"]);
 function planOf(key) {
   return PLANS.find((p) => p.key === key) ?? PLANS[0];
 }
-async function readSettingValue(ctx, key) {
+var TRIAL_DAYS = 3;
+var SESSION_DAYS = 90;
+function settingKey(companyId, key) {
+  return `co:${companyId}:${key}`;
+}
+async function sha256Hex(text) {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function randomHex(bytes) {
+  const buf = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(buf);
+  return [...buf].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+var JOIN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+function randomJoinCode() {
+  const buf = new Uint8Array(6);
+  globalThis.crypto.getRandomValues(buf);
+  return [...buf].map((b) => JOIN_ALPHABET[b % JOIN_ALPHABET.length]).join("");
+}
+function isStandaloneHost(ctx) {
+  return ctx.hostStandalone === true;
+}
+function sessionTokenOf(ctx) {
+  const token = ctx.sessionToken;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+async function sessionOf(ctx) {
+  const token = sessionTokenOf(ctx);
+  if (!token)
+    return null;
+  const db = ctx.db();
+  const [row] = await db.select().from(sessions).where(eq(sessions.token, token));
+  if (!row)
+    return null;
+  if (row.expiresAt && row.expiresAt.getTime() <= Date.now())
+    return null;
+  const [company] = await db.select().from(companies).where(eq(companies.id, row.companyId));
+  if (!company)
+    return null;
+  return {
+    companyId: row.companyId,
+    role: row.role,
+    employeeId: row.employeeId,
+    companyPlan: company.plan
+  };
+}
+async function companyIdOf(ctx) {
+  const session = await sessionOf(ctx);
+  if (session)
+    return session.companyId;
+  if (isStandaloneHost(ctx)) {
+    throw new Error("Session requise — connectez-vous à votre entreprise.");
+  }
+  return 1;
+}
+async function assertOwnerRole(ctx) {
+  const session = await sessionOf(ctx);
+  if (session) {
+    if (session.role !== "proprietaire") {
+      throw new Error("Action réservée au propriétaire de l'entreprise.");
+    }
+    return;
+  }
+  if (isStandaloneHost(ctx)) {
+    throw new Error("Session requise — connectez-vous à votre entreprise.");
+  }
+}
+async function createSession(ctx, companyId, role, employeeId) {
+  const db = ctx.db();
+  const token = randomHex(32);
+  await db.insert(sessions).values({
+    token,
+    companyId,
+    role,
+    employeeId,
+    expiresAt: new Date(Date.now() + SESSION_DAYS * 86400000)
+  });
+  return token;
+}
+var companyShape = object({
+  id: number2(),
+  name: string2(),
+  ownerEmail: string2(),
+  joinCode: string2(),
+  plan: _enum(["essai", "equipe2", "equipe4", "createur"]),
+  trialEndsAt: string2().nullable(),
+  isCreator: boolean2()
+});
+function companyShapeOf(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    ownerEmail: c.ownerEmail,
+    joinCode: c.joinCode,
+    plan: c.plan,
+    trialEndsAt: c.trialEndsAt ? c.trialEndsAt.toISOString() : null,
+    isCreator: c.plan === "createur"
+  };
+}
+var sessionShape = object({
+  companyId: number2(),
+  companyName: string2(),
+  role: _enum(["proprietaire", "employe"]),
+  employeeId: number2().nullable(),
+  employeeName: string2().nullable(),
+  isCreator: boolean2()
+});
+async function readSettingValue(ctx, companyId, key) {
   const db = ctx.db();
   const rows = await db.select().from(settings);
-  return rows.find((r) => r.key === key)?.value ?? null;
+  const scoped = rows.find((r) => r.key === settingKey(companyId, key));
+  if (scoped)
+    return scoped.value;
+  if (companyId === 1) {
+    return rows.find((r) => r.key === key)?.value ?? null;
+  }
+  return null;
 }
-async function writeSettingValue(ctx, key, value) {
+async function writeSettingValue(ctx, companyId, key, value) {
   const db = ctx.db();
-  await db.insert(settings).values({ key, value }).onConflictDoUpdate({
+  const fullKey = settingKey(companyId, key);
+  await db.insert(settings).values({ key: fullKey, value }).onConflictDoUpdate({
     target: settings.key,
     set: { value }
   });
 }
-async function loadPlanKey(ctx) {
+async function deleteSettingValue(ctx, companyId, key) {
   const db = ctx.db();
-  const rows = await db.select().from(settings);
-  const raw = rows.find((r) => r.key === "subscriptionPlan")?.value;
+  await db.delete(settings).where(eq(settings.key, settingKey(companyId, key)));
+  if (companyId === 1) {
+    await db.delete(settings).where(eq(settings.key, key));
+  }
+}
+async function loadPlanKey(ctx, companyId) {
+  const raw = await readSettingValue(ctx, companyId, "subscriptionPlan");
   return raw === "forfait_4_equipes" ? raw : "forfait_2_equipes";
 }
-async function loadCreatorAccess(ctx) {
+async function loadCreatorAccess(ctx, companyId) {
   const db = ctx.db();
-  const rows = await db.select().from(settings);
-  return rows.find((r) => r.key === "creatorAccess")?.value === "1";
+  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+  if (company?.plan === "createur")
+    return true;
+  return await readSettingValue(ctx, companyId, "creatorAccess") === "1";
 }
-async function assertTeamLimit(ctx, date, employeeId, excludeRouteId) {
+async function assertTeamLimit(ctx, companyId, date, employeeId, excludeRouteId) {
   if (employeeId == null)
     return;
-  if (await loadCreatorAccess(ctx))
+  if (await loadCreatorAccess(ctx, companyId))
     return;
   const db = ctx.db();
-  const plan = planOf(await loadPlanKey(ctx));
-  const dayRoutes = await db.select().from(routes).where(eq(routes.date, date));
+  const plan = planOf(await loadPlanKey(ctx, companyId));
+  const dayRoutes = await db.select().from(routes).where(and(eq(routes.companyId, companyId), eq(routes.date, date)));
   const distinct = new Set(dayRoutes.filter((r) => r.id !== excludeRouteId && r.employeeId != null).map((r) => r.employeeId));
   distinct.add(employeeId);
   if (distinct.size > plan.maxTeams) {
@@ -5988,13 +6157,13 @@ function round2(n) {
 }
 var TPS_RATE = 0.05;
 var TVQ_RATE = 0.09975;
-async function loadSettings(ctx) {
+async function loadSettings(ctx, companyId) {
   const db = ctx.db();
   const rows = await db.select().from(settings);
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const out = { ...SETTINGS_DEFAULTS };
   for (const key of Object.keys(SETTINGS_DEFAULTS)) {
-    const raw = map.get(key);
+    const raw = map.get(settingKey(companyId, key)) ?? (companyId === 1 ? map.get(key) : undefined);
     if (raw !== undefined) {
       const n = Number(raw);
       if (Number.isFinite(n))
@@ -6210,14 +6379,14 @@ var employeeDayShape = object({
   onSiteMinutes: number2(),
   events: array(journalEventShape)
 });
-async function loadRoutes(ctx, date) {
+async function loadRoutes(ctx, companyId, date) {
   const db = ctx.db();
-  let routeRows = await db.select().from(routes).orderBy(asc(routes.date), asc(routes.id));
+  let routeRows = await db.select().from(routes).where(eq(routes.companyId, companyId)).orderBy(asc(routes.date), asc(routes.id));
   if (date)
     routeRows = routeRows.filter((r) => r.date === date);
-  const employeeRows = await db.select().from(employees);
+  const employeeRows = await db.select().from(employees).where(eq(employees.companyId, companyId));
   const empName = new Map(employeeRows.map((e) => [e.id, e.name]));
-  const stopRows = await db.select().from(routeStops).orderBy(asc(routeStops.position), asc(routeStops.id));
+  const stopRows = await db.select().from(routeStops).where(eq(routeStops.companyId, companyId)).orderBy(asc(routeStops.position), asc(routeStops.id));
   return routeRows.map((r) => {
     const stops = stopRows.filter((s) => s.routeId === r.id).map((s) => ({
       id: s.id,
@@ -6254,8 +6423,9 @@ var Actions = {
     response: object({ clients: array(clientShape) }),
     async handler(ctx) {
       const db = ctx.db();
-      const clientRows = await db.select().from(clients).orderBy(asc(clients.name));
-      const terrainRows = await db.select().from(terrains).orderBy(asc(terrains.id));
+      const companyId = await companyIdOf(ctx);
+      const clientRows = await db.select().from(clients).where(eq(clients.companyId, companyId)).orderBy(asc(clients.name));
+      const terrainRows = await db.select().from(terrains).where(eq(terrains.companyId, companyId)).orderBy(asc(terrains.id));
       return {
         clients: clientRows.map((c) => ({
           id: c.id,
@@ -6287,7 +6457,7 @@ var Actions = {
     response: object({ employees: array(employeeShape) }),
     async handler(ctx) {
       const db = ctx.db();
-      const rows = await db.select().from(employees).orderBy(asc(employees.name));
+      const rows = await db.select().from(employees).where(eq(employees.companyId, await companyIdOf(ctx))).orderBy(asc(employees.name));
       return {
         employees: rows.map((e) => ({ id: e.id, name: e.name, phone: e.phone }))
       };
@@ -6299,9 +6469,10 @@ var Actions = {
     response: object({ quotes: array(quoteShape) }),
     async handler(ctx) {
       const db = ctx.db();
-      const s = await loadSettings(ctx);
-      const rows = await db.select().from(quotes).orderBy(desc(quotes.id));
-      const clientRows = await db.select().from(clients);
+      const companyId = await companyIdOf(ctx);
+      const s = await loadSettings(ctx, companyId);
+      const rows = await db.select().from(quotes).where(eq(quotes.companyId, companyId)).orderBy(desc(quotes.id));
+      const clientRows = await db.select().from(clients).where(eq(clients.companyId, companyId));
       const clientName = new Map(clientRows.map((c) => [c.id, c.name]));
       const now = Date.now();
       return {
@@ -6354,7 +6525,7 @@ var Actions = {
     request: object({ date: string2().optional() }),
     response: object({ routes: array(routeShape) }),
     async handler(ctx, args) {
-      const routes2 = await loadRoutes(ctx, args.date);
+      const routes2 = await loadRoutes(ctx, await companyIdOf(ctx), args.date);
       return { routes: routes2 };
     }
   }),
@@ -6370,6 +6541,7 @@ var Actions = {
     async handler(ctx, args) {
       const db = ctx.db();
       const [row] = await db.insert(clients).values({
+        companyId: await companyIdOf(ctx),
         name: args.name,
         phone: args.phone,
         email: args.email,
@@ -6392,13 +6564,15 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
       await db.update(clients).set({
         name: args.name,
         phone: args.phone,
         email: args.email,
         notes: args.notes
-      }).where(eq(clients.id, args.id));
+      }).where(and(eq(clients.id, args.id), eq(clients.companyId, companyId)));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6408,11 +6582,13 @@ var Actions = {
     request: object({ id: number2() }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
       await db.batch([
-        db.delete(terrains).where(eq(terrains.clientId, args.id)),
-        db.update(quotes).set({ clientId: null }).where(eq(quotes.clientId, args.id)),
-        db.delete(clients).where(eq(clients.id, args.id))
+        db.delete(terrains).where(and(eq(terrains.clientId, args.id), eq(terrains.companyId, companyId))),
+        db.update(quotes).set({ clientId: null }).where(and(eq(quotes.clientId, args.id), eq(quotes.companyId, companyId))),
+        db.delete(clients).where(and(eq(clients.id, args.id), eq(clients.companyId, companyId)))
       ]);
       ctx.invalidateQueries();
       return { ok: true };
@@ -6431,8 +6607,14 @@ var Actions = {
     }),
     response: idResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      const [client] = await db.select().from(clients).where(and(eq(clients.id, args.clientId), eq(clients.companyId, companyId)));
+      if (!client)
+        throw new Error("createTerrain: client introuvable");
       const [row] = await db.insert(terrains).values({
+        companyId,
         clientId: args.clientId,
         address: args.address,
         service: args.service,
@@ -6460,6 +6642,7 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
       await db.update(terrains).set({
         address: args.address,
@@ -6468,7 +6651,7 @@ var Actions = {
         pricePerVisit: args.pricePerVisit,
         lat: args.lat,
         lng: args.lng
-      }).where(eq(terrains.id, args.id));
+      }).where(and(eq(terrains.id, args.id), eq(terrains.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6479,7 +6662,7 @@ var Actions = {
     response: okResponse,
     async handler(ctx, args) {
       const db = ctx.db();
-      await db.delete(terrains).where(eq(terrains.id, args.id));
+      await db.delete(terrains).where(and(eq(terrains.id, args.id), eq(terrains.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6492,14 +6675,16 @@ var Actions = {
     }),
     response: idResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      const plan = planOf(await loadPlanKey(ctx));
-      const creator = await loadCreatorAccess(ctx);
-      const existing = await db.select().from(employees);
+      const companyId = await companyIdOf(ctx);
+      const plan = planOf(await loadPlanKey(ctx, companyId));
+      const creator = await loadCreatorAccess(ctx, companyId);
+      const existing = await db.select().from(employees).where(eq(employees.companyId, companyId));
       if (!creator && existing.length >= plan.maxEmployees) {
         throw new Error(`Limite du forfait atteinte : ${plan.name} permet ${plan.maxEmployees} employés (+ le propriétaire). Passez au forfait supérieur dans l'onglet Abonnement.`);
       }
-      const [row] = await db.insert(employees).values({ name: args.name, phone: args.phone }).returning({ id: employees.id });
+      const [row] = await db.insert(employees).values({ companyId, name: args.name, phone: args.phone }).returning({ id: employees.id });
       if (!row)
         throw new Error("createEmployee: no row returned");
       ctx.invalidateQueries();
@@ -6515,8 +6700,9 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      await db.update(employees).set({ name: args.name, phone: args.phone }).where(eq(employees.id, args.id));
+      await db.update(employees).set({ name: args.name, phone: args.phone }).where(and(eq(employees.id, args.id), eq(employees.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6526,11 +6712,13 @@ var Actions = {
     request: object({ id: number2() }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
       await db.batch([
-        db.update(routes).set({ employeeId: null }).where(eq(routes.employeeId, args.id)),
-        db.delete(timeEvents).where(eq(timeEvents.employeeId, args.id)),
-        db.delete(employees).where(eq(employees.id, args.id))
+        db.update(routes).set({ employeeId: null }).where(and(eq(routes.employeeId, args.id), eq(routes.companyId, companyId))),
+        db.delete(timeEvents).where(and(eq(timeEvents.employeeId, args.id), eq(timeEvents.companyId, companyId))),
+        db.delete(employees).where(and(eq(employees.id, args.id), eq(employees.companyId, companyId)))
       ]);
       ctx.invalidateQueries();
       return { ok: true };
@@ -6549,8 +6737,16 @@ var Actions = {
     }),
     response: idResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      if (args.clientId != null) {
+        const [client] = await db.select().from(clients).where(and(eq(clients.id, args.clientId), eq(clients.companyId, companyId)));
+        if (!client)
+          throw new Error("createQuote: client introuvable");
+      }
       const [row] = await db.insert(quotes).values({
+        companyId,
         clientId: args.clientId,
         title: args.title,
         lines: JSON.stringify(args.lines),
@@ -6577,7 +6773,14 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      if (args.clientId != null) {
+        const [client] = await db.select().from(clients).where(and(eq(clients.id, args.clientId), eq(clients.companyId, companyId)));
+        if (!client)
+          throw new Error("updateQuote: client introuvable");
+      }
       await db.update(quotes).set({
         clientId: args.clientId,
         title: args.title,
@@ -6585,7 +6788,7 @@ var Actions = {
         status: args.status,
         notes: args.notes,
         updatedAt: new Date
-      }).where(eq(quotes.id, args.id));
+      }).where(and(eq(quotes.id, args.id), eq(quotes.companyId, companyId)));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6595,13 +6798,15 @@ var Actions = {
     request: object({ id: number2(), status: quoteStatus }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      const [q] = await db.select().from(quotes).where(eq(quotes.id, args.id));
+      const companyId = await companyIdOf(ctx);
+      const [q] = await db.select().from(quotes).where(and(eq(quotes.id, args.id), eq(quotes.companyId, companyId)));
       const patch = { status: args.status, updatedAt: new Date };
       if (args.status === "envoyee" && q && !q.sentAt) {
         patch.sentAt = new Date;
       }
-      await db.update(quotes).set(patch).where(eq(quotes.id, args.id));
+      await db.update(quotes).set(patch).where(and(eq(quotes.id, args.id), eq(quotes.companyId, companyId)));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6614,12 +6819,13 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
       await db.update(quotes).set({
         status: args.kind,
         lastFollowUpAt: new Date,
         updatedAt: new Date
-      }).where(eq(quotes.id, args.id));
+      }).where(and(eq(quotes.id, args.id), eq(quotes.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6630,7 +6836,7 @@ var Actions = {
     response: okResponse,
     async handler(ctx, args) {
       const db = ctx.db();
-      await db.delete(quotes).where(eq(quotes.id, args.id));
+      await db.delete(quotes).where(and(eq(quotes.id, args.id), eq(quotes.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6640,7 +6846,7 @@ var Actions = {
     request: object({}),
     response: object({ settings: settingsShape }),
     async handler(ctx) {
-      const settings2 = await loadSettings(ctx);
+      const settings2 = await loadSettings(ctx, await companyIdOf(ctx));
       return { settings: settings2 };
     }
   }),
@@ -6649,9 +6855,11 @@ var Actions = {
     request: object({ settings: settingsShape }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
       for (const [key, value] of Object.entries(args.settings)) {
-        await db.insert(settings).values({ key, value: String(value) }).onConflictDoUpdate({
+        await db.insert(settings).values({ key: settingKey(companyId, key), value: String(value) }).onConflictDoUpdate({
           target: settings.key,
           set: { value: String(value) }
         });
@@ -6677,7 +6885,7 @@ var Actions = {
       grandTotal: number2()
     }),
     async handler(ctx, args) {
-      const s = await loadSettings(ctx);
+      const s = await loadSettings(ctx, await companyIdOf(ctx));
       const est = estimateServices(args.surfacePi2, args.services, s);
       const manMinutes = est.minutes != null ? est.minutes * args.crewSize : null;
       const lines = args.crewSize === 1 ? est.lines : est.lines.map((l) => ({
@@ -6705,8 +6913,9 @@ var Actions = {
     response: object({ requests: array(requestShape) }),
     async handler(ctx) {
       const db = ctx.db();
-      const s = await loadSettings(ctx);
-      const rows = await db.select().from(quoteRequests).orderBy(desc(quoteRequests.id));
+      const companyId = await companyIdOf(ctx);
+      const s = await loadSettings(ctx, companyId);
+      const rows = await db.select().from(quoteRequests).where(eq(quoteRequests.companyId, companyId)).orderBy(desc(quoteRequests.id));
       const listingRows = await db.select().from(directoryListings);
       const listingName = new Map(listingRows.map((l) => [l.id, l.businessName]));
       return {
@@ -6750,22 +6959,39 @@ var Actions = {
       sizeCategory: _enum(["petit", "moyen", "grand"]).nullable().default(null),
       notes: string2().default(""),
       listingId: number2().nullable().default(null),
-      clientAccountId: number2().nullable().default(null)
+      clientAccountId: number2().nullable().default(null),
+      companyCode: string2().nullable().default(null)
     }),
     response: idResponse,
     async handler(ctx, args) {
       const db = ctx.db();
+      let companyId = null;
       if (args.listingId != null) {
         const [listing] = await db.select().from(directoryListings).where(eq(directoryListings.id, args.listingId));
         if (!listing || !listing.visible)
           throw new Error("createQuoteRequest: entreprise introuvable dans l'annuaire");
+        companyId = listing.companyId;
       }
+      if (companyId == null && args.companyCode) {
+        const code = args.companyCode.trim().toUpperCase();
+        const companies2 = await db.select().from(companies);
+        const company = companies2.find((c) => c.joinCode.toUpperCase() === code);
+        if (!company)
+          throw new Error("createQuoteRequest: code d'entreprise inconnu");
+        companyId = company.id;
+      }
+      if (companyId == null)
+        companyId = await companyIdOf(ctx);
       if (args.clientAccountId != null) {
         const [account] = await db.select().from(clientAccounts).where(eq(clientAccounts.id, args.clientAccountId));
         if (!account)
           throw new Error("createQuoteRequest: compte client introuvable");
+        if (account.companyId == null) {
+          await db.update(clientAccounts).set({ companyId }).where(eq(clientAccounts.id, account.id));
+        }
       }
       const [row] = await db.insert(quoteRequests).values({
+        companyId,
         clientName: args.clientName,
         phone: args.phone,
         email: args.email,
@@ -6792,8 +7018,9 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      await db.update(quoteRequests).set({ status: args.status }).where(eq(quoteRequests.id, args.id));
+      await db.update(quoteRequests).set({ status: args.status }).where(and(eq(quoteRequests.id, args.id), eq(quoteRequests.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6804,7 +7031,8 @@ var Actions = {
     response: okResponse,
     async handler(ctx, args) {
       const db = ctx.db();
-      await db.delete(quoteRequests).where(eq(quoteRequests.id, args.id));
+      const companyId = await companyIdOf(ctx);
+      await db.delete(quoteRequests).where(and(eq(quoteRequests.id, args.id), eq(quoteRequests.companyId, companyId)));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -6814,18 +7042,25 @@ var Actions = {
     request: object({ id: number2() }),
     response: object({ quoteId: number2() }),
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      const s = await loadSettings(ctx);
-      const [req] = await db.select().from(quoteRequests).where(eq(quoteRequests.id, args.id));
+      const companyId = await companyIdOf(ctx);
+      const s = await loadSettings(ctx, companyId);
+      const [req] = await db.select().from(quoteRequests).where(and(eq(quoteRequests.id, args.id), eq(quoteRequests.companyId, companyId)));
       if (!req)
         throw new Error("convertQuoteRequest: demande introuvable");
       const services = req.services.split(",").filter((v) => v === "tonte" || v === "deneigement");
       const pi2 = surfacePi2Of(req, s);
       const est = estimateServices(pi2, services, s);
-      const clientRows = await db.select().from(clients);
+      const clientRows = await db.select().from(clients).where(eq(clients.companyId, companyId));
       let client = clientRows.find((c) => c.name.trim().toLowerCase() === req.clientName.trim().toLowerCase());
       if (!client) {
-        const [created] = await db.insert(clients).values({ name: req.clientName, phone: req.phone, email: req.email }).returning();
+        const [created] = await db.insert(clients).values({
+          companyId,
+          name: req.clientName,
+          phone: req.phone,
+          email: req.email
+        }).returning();
         if (!created)
           throw new Error("convertQuoteRequest: client non créé");
         client = created;
@@ -6833,6 +7068,7 @@ var Actions = {
       const serviceEnum = services.length === 2 ? "les_deux" : services[0] === "deneigement" ? "deneigement" : "tonte";
       const geo = await geocodeAddressLookup(req.address);
       await db.insert(terrains).values({
+        companyId,
         clientId: client.id,
         address: req.address,
         service: serviceEnum,
@@ -6843,6 +7079,7 @@ var Actions = {
       });
       const titleParts = services.map((v) => v === "tonte" ? "Tonte" : "Déneigement");
       const [quote] = await db.insert(quotes).values({
+        companyId,
         clientId: client.id,
         title: `${titleParts.join(" + ")} — ${req.address}`,
         lines: JSON.stringify(est.lines),
@@ -6853,7 +7090,7 @@ var Actions = {
       }).returning({ id: quotes.id });
       if (!quote)
         throw new Error("convertQuoteRequest: soumission non créée");
-      await db.update(quoteRequests).set({ status: "convertie" }).where(eq(quoteRequests.id, req.id));
+      await db.update(quoteRequests).set({ status: "convertie" }).where(and(eq(quoteRequests.id, req.id), eq(quoteRequests.companyId, companyId)));
       ctx.invalidateQueries();
       return { quoteId: quote.id };
     }
@@ -7001,7 +7238,7 @@ var Actions = {
     response: object({ profile: directoryProfileShape.nullable() }),
     async handler(ctx) {
       const db = ctx.db();
-      const [row] = await db.select().from(directoryListings).orderBy(asc(directoryListings.id)).limit(1);
+      const [row] = await db.select().from(directoryListings).where(eq(directoryListings.companyId, await companyIdOf(ctx))).limit(1);
       if (!row)
         return { profile: null };
       return {
@@ -7031,6 +7268,7 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
       const values = {
         businessName: args.businessName,
@@ -7042,11 +7280,12 @@ var Actions = {
         visible: args.visible,
         updatedAt: new Date
       };
-      const [existing] = await db.select().from(directoryListings).orderBy(asc(directoryListings.id)).limit(1);
+      const companyId = await companyIdOf(ctx);
+      const [existing] = await db.select().from(directoryListings).where(eq(directoryListings.companyId, companyId)).limit(1);
       if (existing) {
         await db.update(directoryListings).set(values).where(eq(directoryListings.id, existing.id));
       } else {
-        await db.insert(directoryListings).values(values);
+        await db.insert(directoryListings).values({ companyId, ...values });
       }
       ctx.invalidateQueries();
       return { ok: true };
@@ -7062,9 +7301,17 @@ var Actions = {
     }),
     response: idResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      await assertTeamLimit(ctx, args.date, args.employeeId);
+      const companyId = await companyIdOf(ctx);
+      if (args.employeeId != null) {
+        const [emp] = await db.select().from(employees).where(and(eq(employees.id, args.employeeId), eq(employees.companyId, companyId)));
+        if (!emp)
+          throw new Error("createRoute: employé introuvable");
+      }
+      await assertTeamLimit(ctx, companyId, args.date, args.employeeId);
       const [row] = await db.insert(routes).values({
+        companyId,
         date: args.date,
         name: args.name,
         service: args.service,
@@ -7087,14 +7334,21 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      await assertTeamLimit(ctx, args.date, args.employeeId, args.id);
+      const companyId = await companyIdOf(ctx);
+      if (args.employeeId != null) {
+        const [emp] = await db.select().from(employees).where(and(eq(employees.id, args.employeeId), eq(employees.companyId, companyId)));
+        if (!emp)
+          throw new Error("updateRoute: employé introuvable");
+      }
+      await assertTeamLimit(ctx, companyId, args.date, args.employeeId, args.id);
       await db.update(routes).set({
         date: args.date,
         name: args.name,
         service: args.service,
         employeeId: args.employeeId
-      }).where(eq(routes.id, args.id));
+      }).where(and(eq(routes.id, args.id), eq(routes.companyId, companyId)));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -7104,11 +7358,16 @@ var Actions = {
     request: object({ id: number2() }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      const [route] = await db.select().from(routes).where(and(eq(routes.id, args.id), eq(routes.companyId, companyId)));
+      if (!route)
+        return { ok: true };
       await db.batch([
-        db.delete(timeEvents).where(eq(timeEvents.routeId, args.id)),
-        db.delete(routeStops).where(eq(routeStops.routeId, args.id)),
-        db.delete(routes).where(eq(routes.id, args.id))
+        db.delete(timeEvents).where(and(eq(timeEvents.routeId, args.id), eq(timeEvents.companyId, companyId))),
+        db.delete(routeStops).where(and(eq(routeStops.routeId, args.id), eq(routeStops.companyId, companyId))),
+        db.delete(routes).where(and(eq(routes.id, args.id), eq(routes.companyId, companyId)))
       ]);
       ctx.invalidateQueries();
       return { ok: true };
@@ -7119,14 +7378,20 @@ var Actions = {
     request: object({ routeId: number2(), terrainId: number2() }),
     response: idResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      const [terrain] = await db.select().from(terrains).where(eq(terrains.id, args.terrainId));
+      const companyId = await companyIdOf(ctx);
+      const [route] = await db.select().from(routes).where(and(eq(routes.id, args.routeId), eq(routes.companyId, companyId)));
+      if (!route)
+        throw new Error("addStop: tournée introuvable");
+      const [terrain] = await db.select().from(terrains).where(and(eq(terrains.id, args.terrainId), eq(terrains.companyId, companyId)));
       if (!terrain)
         throw new Error("addStop: terrain introuvable");
       const [client] = await db.select().from(clients).where(eq(clients.id, terrain.clientId));
       const existing = await db.select().from(routeStops).where(eq(routeStops.routeId, args.routeId));
       const position = existing.reduce((max, s) => Math.max(max, s.position), 0) + 1;
       const [row] = await db.insert(routeStops).values({
+        companyId,
         routeId: args.routeId,
         terrainId: terrain.id,
         position,
@@ -7152,10 +7417,16 @@ var Actions = {
     }),
     response: idResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      const [route] = await db.select().from(routes).where(and(eq(routes.id, args.routeId), eq(routes.companyId, companyId)));
+      if (!route)
+        throw new Error("addCustomStop: tournée introuvable");
       const existing = await db.select().from(routeStops).where(eq(routeStops.routeId, args.routeId));
       const position = existing.reduce((max, s) => Math.max(max, s.position), 0) + 1;
       const [row] = await db.insert(routeStops).values({
+        companyId,
         routeId: args.routeId,
         terrainId: null,
         position,
@@ -7179,13 +7450,14 @@ var Actions = {
     response: okResponse,
     async handler(ctx, args) {
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
       const patch = {};
       if (args.tasks !== undefined)
         patch.tasks = args.tasks;
       if (args.note !== undefined)
         patch.note = args.note;
       if (Object.keys(patch).length > 0) {
-        await db.update(routeStops).set(patch).where(eq(routeStops.id, args.id));
+        await db.update(routeStops).set(patch).where(and(eq(routeStops.id, args.id), eq(routeStops.companyId, companyId)));
       }
       ctx.invalidateQueries();
       return { ok: true };
@@ -7202,6 +7474,10 @@ var Actions = {
         return { ok: true };
       const siblings = await db.select().from(routeStops).where(eq(routeStops.routeId, stop.routeId)).orderBy(asc(routeStops.position), asc(routeStops.id));
       const remaining = siblings.filter((s) => s.id !== args.id);
+      if (stop.companyId !== await companyIdOf(ctx)) {
+        return { ok: true };
+      }
+      await assertOwnerRole(ctx);
       await db.delete(routeStops).where(eq(routeStops.id, args.id));
       for (const [i, s] of remaining.entries()) {
         await db.update(routeStops).set({ position: i + 1 }).where(eq(routeStops.id, s.id));
@@ -7231,6 +7507,10 @@ var Actions = {
       const other = siblings[swapIdx];
       if (!other)
         return { ok: true };
+      if (stop.companyId !== await companyIdOf(ctx)) {
+        return { ok: true };
+      }
+      await assertOwnerRole(ctx);
       await db.batch([
         db.update(routeStops).set({ position: other.position }).where(eq(routeStops.id, stop.id)),
         db.update(routeStops).set({ position: stop.position }).where(eq(routeStops.id, other.id))
@@ -7246,7 +7526,7 @@ var Actions = {
     async handler(ctx, args) {
       const db = ctx.db();
       const [stop] = await db.select().from(routeStops).where(eq(routeStops.id, args.id));
-      if (!stop)
+      if (!stop || stop.companyId !== await companyIdOf(ctx))
         throw new Error("setStopStatus: arrêt introuvable");
       const now = new Date;
       if (args.status === "en_cours") {
@@ -7283,7 +7563,11 @@ var Actions = {
     request: object({ routeId: number2() }),
     response: optimizeRouteResponse,
     handler: async (ctx, args) => {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
+      const [route] = await db.select().from(routes).where(and(eq(routes.id, args.routeId), eq(routes.companyId, await companyIdOf(ctx))));
+      if (!route)
+        throw new Error("optimizeRoute: tournée introuvable");
       const stops = await db.select().from(routeStops).where(eq(routeStops.routeId, args.routeId)).orderBy(asc(routeStops.position), asc(routeStops.id));
       const geo = stops.filter((s) => s.lat != null && s.lng != null).map((s) => ({ id: s.id, lat: s.lat, lng: s.lng }));
       const distanceBeforeKm = round1(pathKm(geo));
@@ -7329,6 +7613,9 @@ var Actions = {
     response: routeLegsResponse,
     handler: async (ctx, args) => {
       const db = ctx.db();
+      const [route] = await db.select().from(routes).where(and(eq(routes.id, args.routeId), eq(routes.companyId, await companyIdOf(ctx))));
+      if (!route)
+        throw new Error("routeLegs: tournée introuvable");
       const stops = await db.select().from(routeStops).where(eq(routeStops.routeId, args.routeId)).orderBy(asc(routeStops.position), asc(routeStops.id));
       const pairs = [];
       for (let i = 1;i < stops.length; i++) {
@@ -7392,14 +7679,15 @@ var Actions = {
     }),
     async handler(ctx, args) {
       const db = ctx.db();
-      const activePlanKey = await loadPlanKey(ctx);
-      const employees2 = await db.select().from(employees);
-      const dayRoutes = await db.select().from(routes).where(eq(routes.date, args.date));
+      const companyId = await companyIdOf(ctx);
+      const activePlanKey = await loadPlanKey(ctx, companyId);
+      const employees2 = await db.select().from(employees).where(eq(employees.companyId, companyId));
+      const dayRoutes = await db.select().from(routes).where(and(eq(routes.companyId, companyId), eq(routes.date, args.date)));
       const teamsToday = new Set(dayRoutes.map((r) => r.employeeId).filter((x) => x != null)).size;
-      const creatorAccess = await loadCreatorAccess(ctx);
-      const trialStartedAt = await readSettingValue(ctx, "trialStartedAt");
-      const cancelledAt = await readSettingValue(ctx, "subscriptionCancelledAt");
-      const neq = await readSettingValue(ctx, "businessNeq");
+      const creatorAccess = await loadCreatorAccess(ctx, companyId);
+      const trialStartedAt = await readSettingValue(ctx, companyId, "trialStartedAt");
+      const cancelledAt = await readSettingValue(ctx, companyId, "subscriptionCancelledAt");
+      const neq = await readSettingValue(ctx, companyId, "businessNeq");
       const neqRegistered = !!neq;
       let promoUntil = null;
       let promoActive = false;
@@ -7467,11 +7755,17 @@ var Actions = {
     request: object({ planKey: planKeyEnum }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      await db.insert(settings).values({ key: "subscriptionPlan", value: args.planKey }).onConflictDoUpdate({
-        target: settings.key,
-        set: { value: args.planKey }
-      });
+      const companyId = await companyIdOf(ctx);
+      await writeSettingValue(ctx, companyId, "subscriptionPlan", args.planKey);
+      const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+      if (company && company.plan !== "createur") {
+        await db.update(companies).set({
+          plan: args.planKey === "forfait_4_equipes" ? "equipe4" : "equipe2",
+          updatedAt: new Date
+        }).where(eq(companies.id, companyId));
+      }
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -7481,15 +7775,16 @@ var Actions = {
     request: object({ neq: string2() }),
     response: okResponse,
     async handler(ctx, args) {
-      const db = ctx.db();
+      await assertOwnerRole(ctx);
+      const companyId = await companyIdOf(ctx);
       const cleaned = args.neq.replace(/\s/g, "");
       if (cleaned === "") {
-        await db.delete(settings).where(eq(settings.key, "businessNeq"));
+        await deleteSettingValue(ctx, companyId, "businessNeq");
       } else {
         if (!/^\d{10}$/.test(cleaned)) {
           throw new Error("Le NEQ doit contenir exactement 10 chiffres (ex. 2280959828).");
         }
-        await writeSettingValue(ctx, "businessNeq", cleaned);
+        await writeSettingValue(ctx, companyId, "businessNeq", cleaned);
       }
       ctx.invalidateQueries();
       return { ok: true };
@@ -7500,11 +7795,18 @@ var Actions = {
     request: object({}),
     response: okResponse,
     async handler(ctx) {
-      const existing = await readSettingValue(ctx, "trialStartedAt");
+      await assertOwnerRole(ctx);
+      const companyId = await companyIdOf(ctx);
+      const existing = await readSettingValue(ctx, companyId, "trialStartedAt");
       if (!existing) {
-        await writeSettingValue(ctx, "trialStartedAt", new Date().toISOString());
+        const now = new Date;
+        await writeSettingValue(ctx, companyId, "trialStartedAt", now.toISOString());
+        await ctx.db().update(companies).set({
+          trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 86400000),
+          updatedAt: now
+        }).where(eq(companies.id, companyId));
       }
-      await ctx.db().delete(settings).where(eq(settings.key, "subscriptionCancelledAt"));
+      await deleteSettingValue(ctx, companyId, "subscriptionCancelledAt");
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -7522,16 +7824,19 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
-      const planKey = await loadPlanKey(ctx);
+      const companyId = await companyIdOf(ctx);
+      const planKey = await loadPlanKey(ctx, companyId);
       const now = new Date().toISOString();
       await db.insert(exitSurveys).values({
+        companyId,
         reason: args.reason,
         detail: args.detail,
         planKey,
         createdAt: now
       });
-      await writeSettingValue(ctx, "subscriptionCancelledAt", now);
+      await writeSettingValue(ctx, companyId, "subscriptionCancelledAt", now);
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -7541,11 +7846,12 @@ var Actions = {
     request: object({}),
     response: okResponse,
     async handler(ctx) {
-      const db = ctx.db();
-      await db.delete(settings).where(eq(settings.key, "subscriptionCancelledAt"));
-      const trial = await readSettingValue(ctx, "trialStartedAt");
+      await assertOwnerRole(ctx);
+      const companyId = await companyIdOf(ctx);
+      await deleteSettingValue(ctx, companyId, "subscriptionCancelledAt");
+      const trial = await readSettingValue(ctx, companyId, "trialStartedAt");
       if (!trial) {
-        await writeSettingValue(ctx, "trialStartedAt", new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString());
+        await writeSettingValue(ctx, companyId, "trialStartedAt", new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString());
       }
       ctx.invalidateQueries();
       return { ok: true };
@@ -7556,10 +7862,17 @@ var Actions = {
     request: object({ enabled: boolean2() }),
     response: okResponse,
     async handler(ctx, args) {
+      const companyId = await companyIdOf(ctx);
+      if (companyId !== 1) {
+        throw new Error("L'accès créateur est réservé au créateur du programme (Tonte-O-Max).");
+      }
+      const db = ctx.db();
       if (args.enabled) {
-        await writeSettingValue(ctx, "creatorAccess", "1");
+        await writeSettingValue(ctx, companyId, "creatorAccess", "1");
+        await db.update(companies).set({ plan: "createur", updatedAt: new Date }).where(eq(companies.id, companyId));
       } else {
-        await ctx.db().delete(settings).where(eq(settings.key, "creatorAccess"));
+        await deleteSettingValue(ctx, companyId, "creatorAccess");
+        await db.update(companies).set({ plan: "equipe2", updatedAt: new Date }).where(eq(companies.id, companyId));
       }
       ctx.invalidateQueries();
       return { ok: true };
@@ -7579,8 +7892,11 @@ var Actions = {
     }),
     async handler(ctx) {
       const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
       const rows = await db.select().from(exitSurveys).orderBy(desc(exitSurveys.id));
-      return { surveys: rows };
+      return {
+        surveys: companyId === 1 ? rows : rows.filter((r) => r.companyId === companyId)
+      };
     }
   }),
   saveTerrainMeasurement: defineAction({
@@ -7594,13 +7910,14 @@ var Actions = {
     }),
     response: okResponse,
     async handler(ctx, args) {
+      await assertOwnerRole(ctx);
       const db = ctx.db();
       await db.update(terrains).set({
         lotDimensions: args.lotDimensions,
         lotAreaPi2: args.lotAreaPi2,
         workAreaPi2: args.workAreaPi2,
         workPolygon: args.workPolygon
-      }).where(eq(terrains.id, args.terrainId));
+      }).where(and(eq(terrains.id, args.terrainId), eq(terrains.companyId, await companyIdOf(ctx))));
       ctx.invalidateQueries();
       return { ok: true };
     }
@@ -7645,13 +7962,30 @@ var Actions = {
     }),
     async handler(ctx, args) {
       const db = ctx.db();
-      const s = await loadSettings(ctx);
+      const session = await sessionOf(ctx);
+      if (!session && isStandaloneHost(ctx)) {
+        throw new Error("Session requise — connectez-vous à votre entreprise.");
+      }
+      if (session?.role === "employe" && session.employeeId !== args.employeeId) {
+        throw new Error("logEvent: un employé ne peut écrire que dans son propre journal.");
+      }
+      const [employee] = await db.select().from(employees).where(eq(employees.id, args.employeeId));
+      if (!employee)
+        throw new Error("logEvent: employé introuvable");
+      if (session && employee.companyId !== session.companyId) {
+        throw new Error("logEvent: employé d'une autre entreprise");
+      }
+      const companyId = employee.companyId;
+      const s = await loadSettings(ctx, companyId);
       let distanceM = null;
       let verified = null;
       let stop;
       if (args.stopId != null) {
         const [found] = await db.select().from(routeStops).where(eq(routeStops.id, args.stopId));
         stop = found;
+        if (stop && stop.companyId !== companyId) {
+          throw new Error("logEvent: arrêt d'une autre entreprise");
+        }
         if (stop && stop.lat != null && stop.lng != null && args.lat != null && args.lng != null) {
           distanceM = haversineM(args.lat, args.lng, stop.lat, stop.lng);
           verified = distanceM <= s.gpsRadiusM;
@@ -7659,6 +7993,7 @@ var Actions = {
       }
       const now = new Date;
       const [row] = await db.insert(timeEvents).values({
+        companyId,
         employeeId: args.employeeId,
         routeId: args.routeId ?? stop?.routeId ?? null,
         stopId: args.stopId,
@@ -7701,11 +8036,12 @@ var Actions = {
     response: object({ days: array(employeeDayShape) }),
     async handler(ctx, args) {
       const db = ctx.db();
-      const employees2 = await db.select().from(employees).orderBy(asc(employees.name));
-      const events = await db.select().from(timeEvents).where(eq(timeEvents.date, args.date)).orderBy(asc(timeEvents.at), asc(timeEvents.id));
-      const stopRows = await db.select().from(routeStops);
+      const companyId = await companyIdOf(ctx);
+      const employees2 = await db.select().from(employees).where(eq(employees.companyId, companyId)).orderBy(asc(employees.name));
+      const events = await db.select().from(timeEvents).where(and(eq(timeEvents.companyId, companyId), eq(timeEvents.date, args.date))).orderBy(asc(timeEvents.at), asc(timeEvents.id));
+      const stopRows = await db.select().from(routeStops).where(eq(routeStops.companyId, companyId));
       const stopById = new Map(stopRows.map((s) => [s.id, s]));
-      const routeRows = await db.select().from(routes);
+      const routeRows = await db.select().from(routes).where(eq(routes.companyId, companyId));
       const routeById = new Map(routeRows.map((r) => [r.id, r]));
       const now = Date.now();
       const days = employees2.map((emp) => {
@@ -7826,6 +8162,266 @@ var Actions = {
         };
       });
       return { days };
+    }
+  }),
+  registerCompany: defineAction({
+    description: "Inscrit une nouvelle entreprise : crée son espace privé (vide), démarre son essai gratuit de 3 jours sur le forfait choisi et ouvre une session propriétaire.",
+    request: object({
+      companyName: string2().min(1),
+      ownerEmail: string2().min(3),
+      accessCode: string2().min(4),
+      planKey: planKeyEnum.default("forfait_2_equipes")
+    }),
+    response: object({
+      token: string2(),
+      company: companyShape
+    }),
+    async handler(ctx, args) {
+      const db = ctx.db();
+      const email = args.ownerEmail.trim().toLowerCase();
+      const existing = await db.select().from(companies);
+      if (existing.some((c) => c.ownerEmail.trim().toLowerCase() === email)) {
+        throw new Error("Un compte existe déjà pour ce courriel — connectez-vous plutôt.");
+      }
+      const now = new Date;
+      const trialEndsAt = new Date(now.getTime() + TRIAL_DAYS * 86400000);
+      let joinCode = randomJoinCode();
+      while (existing.some((c) => c.joinCode === joinCode)) {
+        joinCode = randomJoinCode();
+      }
+      const [company] = await db.insert(companies).values({
+        name: args.companyName.trim(),
+        ownerEmail: email,
+        accessCodeHash: await sha256Hex(args.accessCode),
+        joinCode,
+        plan: "essai",
+        trialEndsAt
+      }).returning();
+      if (!company)
+        throw new Error("registerCompany: entreprise non créée");
+      await writeSettingValue(ctx, company.id, "trialStartedAt", now.toISOString());
+      await writeSettingValue(ctx, company.id, "subscriptionPlan", args.planKey);
+      const token = await createSession(ctx, company.id, "proprietaire", null);
+      ctx.invalidateQueries();
+      return { token, company: companyShapeOf(company) };
+    }
+  }),
+  loginCompany: defineAction({
+    description: "Connecte le propriétaire d'une entreprise (courriel + code d'accès) et ouvre une session.",
+    request: object({
+      email: string2().min(3),
+      accessCode: string2().min(1)
+    }),
+    response: object({
+      token: string2(),
+      company: companyShape
+    }),
+    async handler(ctx, args) {
+      const db = ctx.db();
+      const email = args.email.trim().toLowerCase();
+      const rows = await db.select().from(companies);
+      const company = rows.find((c) => c.ownerEmail.trim().toLowerCase() === email);
+      const hash = await sha256Hex(args.accessCode);
+      if (!company || company.accessCodeHash !== hash) {
+        throw new Error("Courriel ou code d'accès incorrect.");
+      }
+      const token = await createSession(ctx, company.id, "proprietaire", null);
+      return { token, company: companyShapeOf(company) };
+    }
+  }),
+  getSession: defineAction({
+    description: "Retourne la session courante (entreprise, rôle, employé) ou null. Sans jeton dans l'hôte autonome : null. Sans jeton dans le runtime historique : la session propriétaire de la compagnie nº 1.",
+    request: object({}),
+    response: object({ session: sessionShape.nullable() }),
+    async handler(ctx) {
+      const db = ctx.db();
+      const session = await sessionOf(ctx);
+      if (!session) {
+        if (isStandaloneHost(ctx))
+          return { session: null };
+        const [company] = await db.select().from(companies).where(eq(companies.id, 1));
+        if (!company)
+          return { session: null };
+        return {
+          session: {
+            companyId: 1,
+            companyName: company.name,
+            role: "proprietaire",
+            employeeId: null,
+            employeeName: null,
+            isCreator: company.plan === "createur"
+          }
+        };
+      }
+      const [company] = await db.select().from(companies).where(eq(companies.id, session.companyId));
+      if (!company)
+        return { session: null };
+      let employeeName = null;
+      if (session.employeeId != null) {
+        const [emp] = await db.select().from(employees).where(eq(employees.id, session.employeeId));
+        employeeName = emp?.name ?? null;
+      }
+      return {
+        session: {
+          companyId: session.companyId,
+          companyName: company.name,
+          role: session.role,
+          employeeId: session.employeeId,
+          employeeName,
+          isCreator: session.companyPlan === "createur"
+        }
+      };
+    }
+  }),
+  logout: defineAction({
+    description: "Ferme la session courante (le jeton est détruit).",
+    request: object({}),
+    response: okResponse,
+    async handler(ctx) {
+      const token = sessionTokenOf(ctx);
+      if (token) {
+        const db = ctx.db();
+        await db.delete(sessions).where(eq(sessions.token, token));
+      }
+      return { ok: true };
+    }
+  }),
+  getMyCompany: defineAction({
+    description: "Retourne l'entreprise de la session : nom, courriel du propriétaire, code d'équipe à partager aux employés, forfait et fin d'essai.",
+    request: object({}),
+    response: object({ company: companyShape }),
+    async handler(ctx) {
+      const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+      if (!company)
+        throw new Error("getMyCompany: entreprise introuvable");
+      return { company: companyShapeOf(company) };
+    }
+  }),
+  getJoinCompany: defineAction({
+    description: "Public : à partir du code d'entreprise donné par l'employeur, retourne le nom de l'entreprise et la liste de ses employés — l'employé choisit son nom pour rejoindre.",
+    request: object({ joinCode: string2().min(1) }),
+    response: object({
+      companyName: string2(),
+      employees: array(object({ id: number2(), name: string2() }))
+    }),
+    async handler(ctx, args) {
+      const db = ctx.db();
+      const code = args.joinCode.trim().toUpperCase();
+      const rows = await db.select().from(companies);
+      const company = rows.find((c) => c.joinCode.toUpperCase() === code);
+      if (!company) {
+        throw new Error("Code d'entreprise inconnu — vérifiez le code donné par votre employeur.");
+      }
+      const employees2 = await db.select().from(employees).where(eq(employees.companyId, company.id)).orderBy(asc(employees.name));
+      return {
+        companyName: company.name,
+        employees: employees2.map((e) => ({ id: e.id, name: e.name }))
+      };
+    }
+  }),
+  loginEmployee: defineAction({
+    description: "Connecte un employé à l'entreprise de son employeur (code d'entreprise + son nom dans l'équipe) et ouvre une session employé limitée à cette entreprise.",
+    request: object({
+      joinCode: string2().min(1),
+      employeeId: number2()
+    }),
+    response: object({
+      token: string2(),
+      company: companyShape,
+      employeeName: string2()
+    }),
+    async handler(ctx, args) {
+      const db = ctx.db();
+      const code = args.joinCode.trim().toUpperCase();
+      const rows = await db.select().from(companies);
+      const company = rows.find((c) => c.joinCode.toUpperCase() === code);
+      if (!company)
+        throw new Error("Code d'entreprise inconnu.");
+      const [employee] = await db.select().from(employees).where(and(eq(employees.id, args.employeeId), eq(employees.companyId, company.id)));
+      if (!employee) {
+        throw new Error("Employé introuvable dans cette entreprise.");
+      }
+      const token = await createSession(ctx, company.id, "employe", employee.id);
+      return {
+        token,
+        company: companyShapeOf(company),
+        employeeName: employee.name
+      };
+    }
+  }),
+  updateCompanyAccess: defineAction({
+    description: "Change le courriel du propriétaire et/ou le code d'accès de l'entreprise de la session ; le code d'accès actuel est exigé.",
+    request: object({
+      currentCode: string2().min(1),
+      newEmail: string2().min(3).optional(),
+      newCode: string2().min(4).optional()
+    }),
+    response: okResponse,
+    async handler(ctx, args) {
+      await assertOwnerRole(ctx);
+      const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+      if (!company) {
+        throw new Error("updateCompanyAccess: entreprise introuvable");
+      }
+      const hash = await sha256Hex(args.currentCode);
+      if (company.accessCodeHash !== hash) {
+        throw new Error("Le code d'accès actuel est incorrect.");
+      }
+      const patch = { updatedAt: new Date };
+      if (args.newEmail) {
+        const email = args.newEmail.trim().toLowerCase();
+        const all = await db.select().from(companies);
+        if (all.some((c) => c.id !== companyId && c.ownerEmail.trim().toLowerCase() === email)) {
+          throw new Error("Ce courriel est déjà utilisé par une autre entreprise.");
+        }
+        patch.ownerEmail = email;
+      }
+      if (args.newCode) {
+        patch.accessCodeHash = await sha256Hex(args.newCode);
+      }
+      await db.update(companies).set(patch).where(eq(companies.id, companyId));
+      ctx.invalidateQueries();
+      return { ok: true };
+    }
+  }),
+  listCompanies: defineAction({
+    description: "Vue d'ensemble du créateur du programme : toutes les entreprises inscrites (nom, courriel, forfait, fin d'essai, nombre d'employés). Réservée à l'entreprise créatrice (nº 1).",
+    request: object({}),
+    response: object({
+      companies: array(object({
+        id: number2(),
+        name: string2(),
+        ownerEmail: string2(),
+        plan: _enum(["essai", "equipe2", "equipe4", "createur"]),
+        trialEndsAt: string2().nullable(),
+        createdAt: string2(),
+        employeesCount: number2()
+      }))
+    }),
+    async handler(ctx) {
+      const db = ctx.db();
+      const companyId = await companyIdOf(ctx);
+      const [me] = await db.select().from(companies).where(eq(companies.id, companyId));
+      if (companyId !== 1 || me?.plan !== "createur") {
+        throw new Error("Vue réservée au créateur du programme.");
+      }
+      const companies2 = await db.select().from(companies).orderBy(asc(companies.id));
+      const employees2 = await db.select().from(employees);
+      return {
+        companies: companies2.map((c) => ({
+          id: c.id,
+          name: c.name,
+          ownerEmail: c.ownerEmail,
+          plan: c.plan,
+          trialEndsAt: c.trialEndsAt ? c.trialEndsAt.toISOString() : null,
+          createdAt: c.createdAt.toISOString(),
+          employeesCount: employees2.filter((e) => e.companyId === c.id).length
+        }))
+      };
     }
   })
 };
