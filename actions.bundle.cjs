@@ -2936,7 +2936,7 @@ function initializeContext(params) {
     external: params?.external ?? undefined
   };
 }
-function process(schema, ctx, _params = { path: [], schemaPath: [] }) {
+function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
   var _a;
   const def = schema._zod.def;
   const seen = ctx.seen.get(schema);
@@ -2973,7 +2973,7 @@ function process(schema, ctx, _params = { path: [], schemaPath: [] }) {
     if (parent) {
       if (!result.ref)
         result.ref = parent;
-      process(parent, ctx, params);
+      process2(parent, ctx, params);
       ctx.seen.get(parent).isParent = true;
     }
   }
@@ -3256,14 +3256,14 @@ function isTransforming(_schema, _ctx) {
 }
 var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   const ctx = initializeContext({ ...params, processors });
-  process(schema, ctx);
+  process2(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
 var createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params) => {
   const { libraryOptions, target } = params ?? {};
   const ctx = initializeContext({ ...libraryOptions ?? {}, target, io, processors });
-  process(schema, ctx);
+  process2(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
@@ -3413,7 +3413,7 @@ var arrayProcessor = (schema, ctx, _json, params) => {
   if (typeof maximum === "number")
     json.maxItems = maximum;
   json.type = "array";
-  json.items = process(def.element, ctx, {
+  json.items = process2(def.element, ctx, {
     ...params,
     path: [...params.path, "items"]
   });
@@ -3425,7 +3425,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
   json.properties = {};
   const shape = def.shape;
   for (const key in shape) {
-    json.properties[key] = process(shape[key], ctx, {
+    json.properties[key] = process2(shape[key], ctx, {
       ...params,
       path: [...params.path, "properties", key]
     });
@@ -3448,7 +3448,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
     if (ctx.io === "output")
       json.additionalProperties = false;
   } else if (def.catchall) {
-    json.additionalProperties = process(def.catchall, ctx, {
+    json.additionalProperties = process2(def.catchall, ctx, {
       ...params,
       path: [...params.path, "additionalProperties"]
     });
@@ -3457,7 +3457,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
 var unionProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
   const isExclusive = def.inclusive === false;
-  const options = def.options.map((x, i) => process(x, ctx, {
+  const options = def.options.map((x, i) => process2(x, ctx, {
     ...params,
     path: [...params.path, isExclusive ? "oneOf" : "anyOf", i]
   }));
@@ -3469,11 +3469,11 @@ var unionProcessor = (schema, ctx, json, params) => {
 };
 var intersectionProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  const a = process(def.left, ctx, {
+  const a = process2(def.left, ctx, {
     ...params,
     path: [...params.path, "allOf", 0]
   });
-  const b = process(def.right, ctx, {
+  const b = process2(def.right, ctx, {
     ...params,
     path: [...params.path, "allOf", 1]
   });
@@ -3486,7 +3486,7 @@ var intersectionProcessor = (schema, ctx, json, params) => {
 };
 var nullableProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  const inner = process(def.innerType, ctx, params);
+  const inner = process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   if (ctx.target === "openapi-3.0") {
     seen.ref = def.innerType;
@@ -3497,20 +3497,20 @@ var nullableProcessor = (schema, ctx, json, params) => {
 };
 var nonoptionalProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process(def.innerType, ctx, params);
+  process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
 var defaultProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process(def.innerType, ctx, params);
+  process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   json.default = JSON.parse(JSON.stringify(def.defaultValue));
 };
 var prefaultProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process(def.innerType, ctx, params);
+  process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   if (ctx.io === "input")
@@ -3518,7 +3518,7 @@ var prefaultProcessor = (schema, ctx, json, params) => {
 };
 var catchProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process(def.innerType, ctx, params);
+  process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   let catchValue;
@@ -3533,20 +3533,20 @@ var pipeProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
   const inIsTransform = def.in._zod.traits.has("$ZodTransform");
   const innerType = ctx.io === "input" ? inIsTransform ? def.out : def.in : def.out;
-  process(innerType, ctx, params);
+  process2(innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = innerType;
 };
 var readonlyProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process(def.innerType, ctx, params);
+  process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   json.readOnly = true;
 };
 var optionalProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process(def.innerType, ctx, params);
+  process2(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
@@ -6202,6 +6202,287 @@ function estimateServices(surfacePi2, services, s) {
   }
   return { minutes: Math.round(minutes), lines };
 }
+var ASSISTANT_MONTHLY_LIMIT = 300;
+var assistantRawSchema = object({
+  clientName: string2().default(""),
+  phone: string2().default(""),
+  email: string2().default(""),
+  address: string2().default(""),
+  services: array(_enum(["tonte", "deneigement"])).default([]),
+  surfacePi2: number2().positive().nullable().default(null),
+  sizeCategory: _enum(["petit", "moyen", "grand"]).nullable().default(null),
+  crewSize: number2().int().min(1).max(50).default(1),
+  notes: string2().default("")
+});
+var assistantProposalShape = object({
+  engine: _enum(["modele", "integre"]),
+  clientMatchedId: number2().nullable(),
+  clientMatchedName: string2().nullable(),
+  clientName: string2(),
+  phone: string2(),
+  email: string2(),
+  address: string2(),
+  services: array(_enum(["tonte", "deneigement"])),
+  surfacePi2: number2().nullable(),
+  sizeCategory: _enum(["petit", "moyen", "grand"]).nullable(),
+  crewSize: number2().int().min(1),
+  title: string2(),
+  notes: string2(),
+  missing: array(_enum(["client", "service", "superficie"]))
+});
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function matchAssistantClient(proposedName, rows) {
+  const target = normalizePlace(proposedName);
+  if (!target)
+    return null;
+  for (const r of rows) {
+    if (normalizePlace(r.name) === target)
+      return r;
+  }
+  const tTokens = target.split(/\s+/).filter((w) => w.length >= 3);
+  let best = null;
+  let bestCommon = 0;
+  for (const r of rows) {
+    const nTokens = normalizePlace(r.name).split(/\s+/).filter((w) => w.length >= 3);
+    const common = tTokens.filter((w) => nTokens.includes(w)).length;
+    const strong = common >= 2 || common === 1 && (tTokens.length === 1 || nTokens.length === 1);
+    if (strong && common > bestCommon) {
+      best = r;
+      bestCommon = common;
+    }
+  }
+  return best;
+}
+function finalizeAssistantProposal(raw, engine, rows) {
+  const match = raw.clientName ? matchAssistantClient(raw.clientName, rows) : null;
+  const missing = [];
+  if (!match && !raw.clientName.trim())
+    missing.push("client");
+  if (raw.services.length === 0)
+    missing.push("service");
+  if (raw.surfacePi2 == null && raw.sizeCategory == null)
+    missing.push("superficie");
+  const svcText = raw.services.map((s) => s === "tonte" ? "Tonte" : "Déneigement").join(" et ");
+  const name = match?.name ?? raw.clientName.trim();
+  const title = svcText && name ? `${svcText} — ${name}` : name ? `Soumission — ${name}` : svcText || "Nouvelle soumission";
+  return {
+    engine,
+    clientMatchedId: match?.id ?? null,
+    clientMatchedName: match?.name ?? null,
+    clientName: raw.clientName.trim(),
+    phone: raw.phone,
+    email: raw.email,
+    address: raw.address.trim(),
+    services: raw.services,
+    surfacePi2: raw.surfacePi2 != null ? Math.round(raw.surfacePi2) : null,
+    sizeCategory: raw.sizeCategory,
+    crewSize: Math.min(50, Math.max(1, Math.round(raw.crewSize) || 1)),
+    title,
+    notes: raw.notes,
+    missing
+  };
+}
+function extractNewClientName(texte) {
+  const stop = new Set([
+    "rue",
+    "avenue",
+    "boulevard",
+    "chemin",
+    "rang",
+    "route",
+    "tonte",
+    "deneigement",
+    "saison",
+    "terrain",
+    "equipe",
+    "pour",
+    "grand",
+    "petit",
+    "moyen",
+    "seulement"
+  ]);
+  const clean = (raw) => raw.split(/\s+/).filter((w) => w && !stop.has(normalizePlace(w))).join(" ").trim();
+  const hon = texte.match(/(?:^|[.,;:\n]\s*|\b)(?:m\.|mme|mr|madame|monsieur|dr|dre)\s+([A-Za-zÀ-ÖØ-öø-ÿ'’-]+(?:\s+(?:de\s+|d')?[A-Za-zÀ-ÖØ-öø-ÿ'’-]+)?)/i);
+  if (hon?.[1]) {
+    const name = clean(hon[1]);
+    if (name)
+      return name;
+  }
+  const pour = texte.match(/\bpour\s+([A-ZÀ-Þ][\w'’-]+(?:\s+[A-ZÀ-Þ][\w'’-]+)+)/);
+  if (pour?.[1]) {
+    const name = clean(pour[1]);
+    if (name)
+      return name;
+  }
+  const labeled = texte.match(/\bclient\s*:\s*([^,;.\n]+)/i);
+  if (labeled?.[1]) {
+    const name = clean(labeled[1]);
+    if (name)
+      return name;
+  }
+  return "";
+}
+function extractByRules(texte, rows) {
+  const norm = normalizePlace(texte);
+  let clientName = "";
+  for (const r of rows) {
+    const nName = normalizePlace(r.name);
+    if (nName && norm.includes(nName)) {
+      clientName = r.name;
+      break;
+    }
+    const tokens = nName.split(/\s+/).filter((w) => w.length >= 4);
+    const last = tokens[tokens.length - 1];
+    if (last && new RegExp(`\\b${escapeRegExp(last)}\\b`).test(norm)) {
+      clientName = r.name;
+      break;
+    }
+  }
+  if (!clientName)
+    clientName = extractNewClientName(texte);
+  let phone = "";
+  const phoneMatch = texte.match(/\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/);
+  if (phoneMatch) {
+    const digits = phoneMatch[0].replace(/\D/g, "");
+    if (digits.length === 10) {
+      phone = `${digits.slice(0, 3)} ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+  }
+  const emailMatch = texte.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  const email = emailMatch ? emailMatch[0] : "";
+  let address = "";
+  const addrMatch = texte.match(/\d{1,6}\s+(?:rue|avenue|av\.?|boulevard|boul\.?|chemin|ch\.?|rang|route|rte\.?|impasse|place|allee|croissant|montee|street|st\.?|drive|dr\.?)\b[^,;.!?\n]*/i);
+  if (addrMatch) {
+    let segment = addrMatch[0].split(/\s+(?=(?:tonte|deneigement|deneig|pour|terrain|saison|equipe|chez)\b)/i)[0];
+    segment = segment.split(/\s+/).slice(0, 6).join(" ").trim();
+    address = segment;
+    const after = texte.slice((addrMatch.index ?? 0) + addrMatch[0].length);
+    const city = after.match(/^,\s*([A-Za-zÀ-ÖØ-öø-ÿ'’ -]{2,30})/);
+    if (city?.[1] && !/(tonte|deneig|pi2|saison|equipe)/i.test(city[1]) && !address.toLowerCase().includes(city[1].trim().toLowerCase())) {
+      address += `, ${city[1].trim()}`;
+    }
+  }
+  const services = [];
+  if (/\bles\s+deux\b/.test(norm)) {
+    services.push("tonte", "deneigement");
+  } else {
+    if (/(tonte|pelouse|gazon)/.test(norm))
+      services.push("tonte");
+    if (/(deneigement|deneig)/.test(norm))
+      services.push("deneigement");
+  }
+  let surfacePi2 = null;
+  let sizeCategory = null;
+  const surf = norm.match(/(\d[\d\s.]*\d|\d)\s*(pi2|pi²|pieds?\s*carres?|m2|metres?\s*carres?)(?![a-z])/);
+  if (surf?.[1] && surf[2]) {
+    let numRaw = surf[1].replace(/\s/g, "");
+    if (/^\d{1,3}(\.\d{3})+$/.test(numRaw))
+      numRaw = numRaw.replace(/\./g, "");
+    const value = parseFloat(numRaw.replace(",", "."));
+    if (Number.isFinite(value) && value > 0) {
+      surfacePi2 = /^m/.test(surf[2]) ? value * 10.7639 : value;
+    }
+  }
+  if (surfacePi2 == null) {
+    const cat = norm.match(/\b(petit|moyen|grand)\s+terrain\b|\bterrain\s+(petit|moyen|grand)\b/);
+    const word = cat?.[1] ?? cat?.[2];
+    if (word === "petit" || word === "moyen" || word === "grand") {
+      sizeCategory = word;
+    }
+  }
+  let crewSize = 1;
+  const crew = norm.match(/equipe\s*(?:de|a|:)?\s*(\d{1,2})/) ?? norm.match(/(\d{1,2})\s*(?:employes|personnes|gars|hommes)/);
+  if (crew?.[1]) {
+    const n = parseInt(crew[1], 10);
+    if (Number.isFinite(n) && n >= 1)
+      crewSize = Math.min(50, n);
+  }
+  const notesParts = [];
+  if (/entree\s+double/.test(norm))
+    notesParts.push("Entrée double");
+  return {
+    clientName,
+    phone,
+    email,
+    address,
+    services,
+    surfacePi2,
+    sizeCategory,
+    crewSize,
+    notes: notesParts.join(" · ")
+  };
+}
+async function extractWithModel(texte, clientNames) {
+  const apiKey = process.env.LANDCREW_AI_API_KEY;
+  if (!apiKey)
+    return null;
+  const model = process.env.LANDCREW_AI_MODEL || "claude-haiku-4-5";
+  const base = (process.env.LANDCREW_AI_BASE_URL || "").replace(/\/$/, "");
+  const system = "Tu extrais les champs d'une demande de soumission d'un entrepreneur " + "en tonte de pelouse et déneigement au Québec. Tu réponds UNIQUEMENT " + "avec un objet JSON, sans texte autour.";
+  const prompt = `Phrase de l'entrepreneur : « ${texte} »
+` + `Clients existants (noms seulement) : ${clientNames.join(", ") || "aucun"}
+
+` + "Retourne un JSON avec exactement ces clés : clientName (string), " + "phone (string), email (string), address (string), services (tableau " + 'contenant "tonte" et/ou "deneigement"), surfacePi2 (nombre ou null), ' + 'sizeCategory ("petit", "moyen", "grand" ou null), crewSize (entier ' + ">= 1), notes (string). N'invente jamais un nombre absent de la " + "phrase : surfacePi2 = null si la superficie n'est pas écrite. Si le " + "client nommé est un client existant, écris son nom exactement " + "comme dans la liste.";
+  const ctrl = new AbortController;
+  const timer = setTimeout(() => ctrl.abort(), 1e4);
+  try {
+    let text = "";
+    if (base) {
+      const res = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 700,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: prompt }
+          ]
+        })
+      });
+      if (!res.ok)
+        return null;
+      const data = await res.json();
+      text = data.choices?.[0]?.message?.content ?? "";
+    } else {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 700,
+          system,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      if (!res.ok)
+        return null;
+      const data = await res.json();
+      text = (data.content ?? []).map((c) => c.text ?? "").join("");
+    }
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start < 0 || end <= start)
+      return null;
+    const parsed = assistantRawSchema.safeParse(JSON.parse(text.slice(start, end + 1)));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function geocodeAddressLookup(address) {
   try {
     const res = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" + encodeURIComponent(address), { headers: { "User-Agent": "TourneesTonteDeneigement/1.0" } });
@@ -6904,6 +7185,55 @@ var Actions = {
         tps,
         tvq,
         grandTotal: round2(subtotal + tps + tvq)
+      };
+    }
+  }),
+  assistantPropose: defineAction({
+    description: "« Dis-le-moi » : turns one free-form sentence into a PROPOSED quote-form fill (client, address, services, surface, crew size, missing fields). Creates nothing and computes no price — prices still come from estimateQuote and the entrepreneur confirms before anything is saved. Uses the language model only when the server carries LANDCREW_AI_API_KEY; otherwise (or on model failure) a free built-in rules extractor runs. Monthly counter per company, capped at 300.",
+    request: object({
+      texte: string2().trim().min(1).max(2000),
+      contexte: string2().max(500).default("")
+    }),
+    response: object({
+      proposal: assistantProposalShape.nullable(),
+      capReached: boolean2(),
+      usage: object({ used: number2(), limit: number2() }),
+      message: string2()
+    }),
+    async handler(ctx, args) {
+      await assertOwnerRole(ctx);
+      const companyId = await companyIdOf(ctx);
+      const limit = ASSISTANT_MONTHLY_LIMIT;
+      const monthKey = `aiFills:${new Date().toISOString().slice(0, 7)}`;
+      const usedBefore = Number(await readSettingValue(ctx, companyId, monthKey) ?? 0) || 0;
+      if (usedBefore >= limit) {
+        return {
+          proposal: null,
+          capReached: true,
+          usage: { used: usedBefore, limit },
+          message: "Plafond mensuel de l'assistant atteint (300 remplissages) — le formulaire manuel reste disponible, et le compteur repart le 1er du mois."
+        };
+      }
+      const db = ctx.db();
+      const clientRows = await db.select({ id: clients.id, name: clients.name }).from(clients).where(eq(clients.companyId, companyId));
+      let raw = null;
+      let engine = "integre";
+      if (process.env.LANDCREW_AI_API_KEY) {
+        raw = await extractWithModel(args.texte, clientRows.map((c) => c.name));
+        if (raw)
+          engine = "modele";
+      }
+      if (!raw) {
+        raw = extractByRules(args.texte, clientRows);
+        engine = "integre";
+      }
+      const proposal = finalizeAssistantProposal(raw, engine, clientRows);
+      await writeSettingValue(ctx, companyId, monthKey, String(usedBefore + 1));
+      return {
+        proposal,
+        capReached: false,
+        usage: { used: usedBefore + 1, limit },
+        message: ""
       };
     }
   }),
