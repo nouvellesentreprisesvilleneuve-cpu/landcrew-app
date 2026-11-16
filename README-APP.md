@@ -13,7 +13,8 @@ ordinaire, sans Muse.
 | `app.js` | Fichier de démarrage (startup file) : serveur HTTP Node.js. Sert le client web et l'API `POST /actions`. |
 | `actions.bundle.cjs` | Les 57 actions serveur + le schéma + zod, compilés en un seul fichier CommonJS autonome (aucun `require` externe). Reconstruisible via `../build/build.sh`. |
 | `public/` | Le client web compilé (le même que celui de l'artefact) + `manifest.webmanifest`, `sw.js`, icônes et `.well-known/assetlinks.json`. |
-| `migrations/` | Les migrations SQL (0001 → 0006), appliquées automatiquement au premier démarrage. |
+| `migrations/` | Les migrations SQL (0001 → 0008), appliquées automatiquement au premier démarrage. |
+| `modules/cartographie.js` | Module « Cartographie et registres » (2026-11-15) : 3 actions fusionnées dans `app.js` sans toucher au bundle — `lookupCadastralLot` (adresse → cadastre officiel du Québec : nº de lot, polygone, superficie), `saveTerrainRegistryData`, `estimateFromTerrainMeasurement` (prix calculé sur la surface de travail MESURÉE — gazon seulement — jamais sur la superficie brute du lot). Détails et intégration client : `modules/INTEGRATION-CLIENT.md`. |
 | `data/` | Emplacement du fichier SQLite `landcrew.db` (créé au premier démarrage). Jamais exposé par le serveur web. |
 | `package.json` | Dépendances d'exécution : `drizzle-orm` et `@libsql/client` (versions épinglées, identiques à celles de l'artefact). |
 
@@ -33,9 +34,16 @@ migrations. Vérification : `GET /healthz` répond `{"ok":true,...}`.
   `{ "action": "<nom>", "args": { ... } }` → `{ "data": ... }` ou
   `{ "error": "..." }`. Validation des entrées et des sorties par les
   mêmes schémas zod que dans Muse.
-- L'application est mono-entreprise et sans mot de passe, comme dans
-  Muse : l'accès se fait par l'adresse. Voir `../rapport-deploiement.md`
-  pour les implications et les recommandations (test fermé).
+- **Multi-entreprise (depuis la migration 0007)** : chaque compagnie a
+  son espace privé et étanche. Inscription par nom + courriel + code
+  d'accès (haché SHA-256), essai gratuit de 3 jours, forfaits par
+  compagnie (50 $/mois 2 équipes, 75 $/mois 4 équipes). La compagnie
+  nº 1 « Tonte-O-Max » (créateur, gratuit à vie) possède toutes les
+  données d'avant la migration. Les employés rejoignent leur employeur
+  par son code d'entreprise ; l'espace client public route chaque
+  demande vers la bonne entreprise. Sans jeton de session valide
+  (en-tête `x-landcrew-session`), les actions métier sont refusées —
+  seules les actions d'accès et l'espace client public sont ouverts.
 - Les actions `geocodeAddress`, `optimizeRoute` et `routeLegs` appellent
   des services publics externes (OpenStreetMap / OSRM) depuis le serveur ;
   l'hébergement doit autoriser les requêtes HTTPS sortantes (cas normal

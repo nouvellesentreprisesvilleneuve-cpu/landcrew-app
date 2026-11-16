@@ -27,6 +27,19 @@ const { createClient } = require("@libsql/client");
 const { drizzle } = require("drizzle-orm/libsql");
 const { Actions } = require("./actions.bundle.cjs");
 
+// Module « Cartographie et registres » (ajout du 2026-11-15, ordre de
+// Maxime : les prix partent du vrai terrain — cadastre officiel, puis
+// gazon seulement mesuré). Ses actions sont fusionnées avec celles du
+// bundle SANS modifier le bundle d'origine ; si le module échoue à
+// charger, l'application démarre quand même avec les actions d'origine.
+let cartographieActions = {};
+try {
+  cartographieActions = require("./modules/cartographie.js").Actions;
+} catch (e) {
+  console.error("[landcrew] module cartographie non chargé :", e);
+}
+const AllActions = { ...Actions, ...cartographieActions };
+
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const DB_PATH =
@@ -186,7 +199,7 @@ async function handleAction(req, res) {
   } catch {
     return sendJson(res, 200, { error: "Corps de requête JSON invalide" });
   }
-  const def = Actions[payload.action];
+  const def = AllActions[payload.action];
   if (!def || typeof def.handler !== "function") {
     return sendJson(res, 200, {
       error: `Action inconnue : ${String(payload.action)}`,
